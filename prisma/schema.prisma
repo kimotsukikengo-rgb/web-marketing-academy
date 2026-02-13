@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================================
+// AUTH
+// ============================================================
+
+model User {
+  id             String   @id @default(cuid())
+  name           String?
+  email          String   @unique
+  hashedPassword String
+  image          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  lessonProgress LessonProgress[]
+  quizAttempts   QuizAttempt[]
+  reviewSessions ReviewSession[]
+}
+
+// ============================================================
+// COURSE STRUCTURE
+// ============================================================
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  thumbnail   String?
+  category    String
+  difficulty  String   @default("beginner")
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chapters Chapter[]
+}
+
+model Chapter {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  order       Int
+  courseId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+
+  @@index([courseId])
+}
+
+model Lesson {
+  id                   String   @id @default(cuid())
+  title                String
+  type                 String
+  order                Int
+  chapterId            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  youtubeUrl           String?
+  videoDurationSeconds Int?
+  textContent          String?
+
+  chapter  Chapter          @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  quiz     Quiz?
+  progress LessonProgress[]
+
+  @@index([chapterId])
+}
+
+// ============================================================
+// QUIZ
+// ============================================================
+
+model Quiz {
+  id           String   @id @default(cuid())
+  title        String
+  description  String?
+  passingScore Int      @default(70)
+  lessonId     String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lesson    Lesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions Question[]
+  attempts  QuizAttempt[]
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  text        String
+  explanation String?
+  order       Int
+  quizId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quiz    Quiz                  @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  options QuestionOption[]
+  tags    QuestionTagRelation[]
+  answers QuizAnswer[]
+
+  @@index([quizId])
+}
+
+model QuestionOption {
+  id         String  @id @default(cuid())
+  text       String
+  isCorrect  Boolean @default(false)
+  order      Int
+  questionId String
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model QuestionTag {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  category    String
+  description String?
+
+  questions QuestionTagRelation[]
+}
+
+model QuestionTagRelation {
+  id         String @id @default(cuid())
+  questionId String
+  tagId      String
+
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag      QuestionTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, tagId])
+  @@index([questionId])
+  @@index([tagId])
+}
+
+// ============================================================
+// PROGRESS & ATTEMPT TRACKING
+// ============================================================
+
+model QuizAttempt {
+  id              String    @id @default(cuid())
+  userId          String
+  quizId          String
+  score           Float
+  totalQuestions  Int
+  correctCount   Int
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+  isReviewAttempt Boolean   @default(false)
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers QuizAnswer[]
+
+  @@index([userId])
+  @@index([quizId])
+  @@index([userId, quizId])
+}
+
+model QuizAnswer {
+  id               String   @id @default(cuid())
+  attemptId        String
+  questionId       String
+  selectedOptionId String?
+  isCorrect        Boolean
+  answeredAt       DateTime @default(now())
+
+  attempt  QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+  @@index([questionId])
+}
+
+model LessonProgress {
+  id             String    @id @default(cuid())
+  userId         String
+  lessonId       String
+  isCompleted    Boolean   @default(false)
+  completedAt    DateTime?
+  lastAccessedAt DateTime  @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([userId])
+  @@index([lessonId])
+}
+
+// ============================================================
+// REVIEW SYSTEM
+// ============================================================
+
+model ReviewSession {
+  id             String    @id @default(cuid())
+  userId         String
+  focusTagIds    String
+  totalQuestions Int
+  correctCount   Int       @default(0)
+  status         String    @default("in_progress")
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
