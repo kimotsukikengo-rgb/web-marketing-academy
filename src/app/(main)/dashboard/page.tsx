@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth"
 import { getCoursesWithProgress } from "@/services/course.service"
 import { getOverallStats, getRecentActivity } from "@/services/progress.service"
-import { getNextIncompleteLesson } from "@/services/course.service"
 import Link from "next/link"
 import {
   BookOpen,
@@ -93,7 +92,7 @@ export default async function DashboardPage() {
             </div>
           ) : (
             courses.map((course) => (
-              <CourseProgressRow key={course.id} course={course} userId={userId} />
+              <CourseProgressRow key={course.id} course={course} />
             ))
           )}
         </div>
@@ -188,9 +187,8 @@ function StatCard({
   )
 }
 
-async function CourseProgressRow({
+function CourseProgressRow({
   course,
-  userId,
 }: {
   course: {
     id: string
@@ -199,11 +197,13 @@ async function CourseProgressRow({
     totalLessons: number
     completedLessons: number
     completionPercentage: number
+    nextLesson: {
+      courseId: string
+      chapterId: string
+      lessonId: string
+    } | null
   }
-  userId: string
 }) {
-  const nextLesson = await getNextIncompleteLesson(userId, course.id)
-
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-5">
       <div className="flex items-start justify-between mb-3">
@@ -223,9 +223,9 @@ async function CourseProgressRow({
           style={{ width: `${course.completionPercentage}%` }}
         />
       </div>
-      {nextLesson && (
+      {course.nextLesson && (
         <Link
-          href={`/courses/${nextLesson.courseId}/chapters/${nextLesson.chapterId}/lessons/${nextLesson.lessonId}`}
+          href={`/courses/${course.nextLesson.courseId}/chapters/${course.nextLesson.chapterId}/lessons/${course.nextLesson.lessonId}`}
           className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
           続きから学習

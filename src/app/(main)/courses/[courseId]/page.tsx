@@ -1,7 +1,5 @@
 import { auth } from "@/lib/auth"
 import { getCourseWithDetails } from "@/services/course.service"
-import { getCourseProgress } from "@/services/progress.service"
-import { getLessonProgress } from "@/services/progress.service"
 import { prisma } from "@/lib/prisma"
 import { ChapterList } from "@/components/course/ChapterList"
 import { ArrowLeft, BookOpen } from "lucide-react"
@@ -15,25 +13,30 @@ export default async function CourseDetailPage({
 }) {
   const { courseId } = await params
   const session = await auth()
-  const course = await getCourseWithDetails(courseId)
+
+  // コース構造（キャッシュ済み）と進捗を並列取得
+  const [course, completedLessons] = await Promise.all([
+    getCourseWithDetails(courseId),
+    prisma.lessonProgress.findMany({
+      where: {
+        userId: session!.user.id,
+        isCompleted: true,
+        lesson: { chapter: { courseId } },
+      },
+      select: { lessonId: true },
+    }),
+  ])
 
   if (!course) notFound()
 
-  const progress = await getCourseProgress(session!.user.id, courseId)
-
-  // Get lesson completion status
-  const allLessonIds = course.chapters.flatMap((ch) =>
-    ch.lessons.map((l) => l.id)
-  )
-  const completedLessons = await prisma.lessonProgress.findMany({
-    where: {
-      userId: session!.user.id,
-      lessonId: { in: allLessonIds },
-      isCompleted: true,
-    },
-    select: { lessonId: true },
-  })
   const completedSet = new Set(completedLessons.map((l) => l.lessonId))
+  const totalLessons = course.chapters.reduce(
+    (sum, ch) => sum + ch.lessons.length,
+    0
+  )
+  const completedCount = completedSet.size
+  const percentage =
+    totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0
 
   const difficultyLabel: Record<string, string> = {
     beginner: "初級",
@@ -71,25 +74,22 @@ export default async function CourseDetailPage({
           </h1>
           <p className="text-slate-600 mb-6">{course.description}</p>
 
-          {progress && (
-            <div className="bg-slate-50 rounded-xl p-4">
-              <div className="flex items-center justify-between text-sm mb-2">
-                <span className="text-slate-600">
-                  {progress.completedLessons} / {progress.totalLessons}{" "}
-                  レッスン完了
-                </span>
-                <span className="font-semibold text-blue-600">
-                  {progress.percentage}%
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2.5">
-                <div
-                  className="bg-blue-600 h-2.5 rounded-full transition-all"
-                  style={{ width: `${progress.percentage}%` }}
-                />
-              </div>
+          <div className="bg-slate-50 rounded-xl p-4">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-slate-600">
+                {completedCount} / {totalLessons} レッスン完了
+              </span>
+              <span className="font-semibold text-blue-600">
+                {percentage}%
+              </span>
             </div>
-          )}
+            <div className="w-full bg-slate-200 rounded-full h-2.5">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all"
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
 
